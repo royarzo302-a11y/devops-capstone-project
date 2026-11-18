@@ -1,5 +1,7 @@
 # devops-capstone-project
 
+[![CI Build](https://github.com/royarzo302-a11y/devops-capstone-project/actions/workflows/ci-build.yaml/badge.svg)](https://github.com/royarzo302-a11y/devops-capstone-project/actions/workflows/ci-build.yaml)
+
 IBM DevOps capstone project for a Flask REST API that manages customer accounts in an e-commerce system. The starter service supports creating accounts. The project adds reading, updating, deleting, and listing accounts, along with automated tests, continuous integration, containerization, and Kubernetes deployment.
 
 ## Starter code and setup

@@ -1,3 +1,9 @@
+# devops-capstone-project
+
+IBM DevOps capstone project for a Flask REST API that manages customer accounts in an e-commerce system. The starter service supports creating accounts. The project adds reading, updating, deleting, and listing accounts, along with automated tests, continuous integration, containerization, and Kubernetes deployment.
+
+## Starter code and setup
+
 # DevOps Capstone Template
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)

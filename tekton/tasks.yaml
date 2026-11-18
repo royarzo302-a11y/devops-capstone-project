@@ -50,3 +50,58 @@ spec:
           rm -rf "${WORKSPACE_SOURCE_PATH}"/..?*
         fi
 
+
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: nose
+spec:
+  description: Run the accounts service unit tests against an isolated SQLite database.
+  workspaces:
+    - name: source
+  steps:
+    - name: nosetests
+      image: python:3.9-slim
+      workingDir: $(workspaces.source.path)
+      env:
+        - name: DATABASE_URI
+          value: "sqlite:///:memory:"
+      script: |
+        #!/bin/sh
+        set -eu
+        python -m pip install --quiet -r requirements.txt
+        nosetests --with-xunit --xunit-file=/tmp/capstone-nose.xml
+        coverage report -m
+
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: deploy-accounts
+spec:
+  params:
+    - name: image
+      type: string
+  workspaces:
+    - name: source
+  steps:
+    - name: apply
+      image: quay.io/openshift/origin-cli:4.7
+      workingDir: $(workspaces.source.path)
+      env:
+        - name: ACCOUNTS_IMAGE
+          value: $(params.image)
+      script: |
+        #!/bin/sh
+        set -eu
+        case "$ACCOUNTS_IMAGE" in
+          ""|*[!a-zA-Z0-9./:_@-]*)
+            echo "The image reference contains unsupported characters." >&2
+            exit 1
+            ;;
+        esac
+        sed "s|IMAGE_NAME_HERE|$ACCOUNTS_IMAGE|g" deploy/deployment.yaml > /tmp/accounts-deployment.yaml
+        oc apply -f /tmp/accounts-deployment.yaml -f deploy/service.yaml
+        oc rollout status deployment/accounts --timeout=180s
+        oc get deployment,pods,replicasets,services -l app=accounts

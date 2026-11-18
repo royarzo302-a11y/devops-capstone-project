@@ -21,3 +21,8 @@ SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 # Secret for session management
 SECRET_KEY = os.getenv("SECRET_KEY", "s3cr3t-key-shhhh")
+
+
+# The lab API accepts anonymous cross-origin requests. Deployments can set an allowlist.
+FORCE_HTTPS = os.getenv("FORCE_HTTPS", "true").lower() == "true"
+CORS_ORIGINS = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "*").split(",")]

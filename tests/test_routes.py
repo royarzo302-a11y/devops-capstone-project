@@ -123,4 +123,58 @@ class TestAccountService(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
-    # ADD YOUR TEST CASES HERE ...
+    def test_read_account(self):
+        """It should read an existing account"""
+        account = self._create_accounts(1)[0]
+        response = self.client.get(f"{BASE_URL}/{account.id}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.get_json(), account.serialize())
+
+    def test_read_missing_account(self):
+        """It should return 404 for a missing account"""
+        response = self.client.get(f"{BASE_URL}/0")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_list_accounts(self):
+        """It should list all existing accounts"""
+        accounts = self._create_accounts(3)
+        response = self.client.get(BASE_URL)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertCountEqual(response.get_json(), [a.serialize() for a in accounts])
+
+    def test_list_empty_accounts(self):
+        """It should return an empty list when no accounts exist"""
+        response = self.client.get(BASE_URL)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.get_json(), [])
+
+    def test_update_account(self):
+        """It should update the account identified by its URL"""
+        account = self._create_accounts(1)[0]
+        payload = dict(account.serialize(), name="Updated Name", id=0)
+        url = f"{BASE_URL}/{account.id}"
+        response = self.client.put(url, json=payload)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        expected = dict(payload, id=account.id)
+        self.assertEqual(response.get_json(), expected)
+        self.assertEqual(self.client.get(url).get_json(), expected)
+
+    def test_update_missing_account(self):
+        """It should return 404 when an account cannot be updated"""
+        response = self.client.put(f"{BASE_URL}/0", json=AccountFactory().serialize())
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_delete_account(self):
+        """It should delete an account and tolerate a repeated DELETE"""
+        account = self._create_accounts(1)[0]
+        url = f"{BASE_URL}/{account.id}"
+        for _ in range(2):
+            response = self.client.delete(url)
+            self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+            self.assertEqual(response.data, b"")
+        self.assertEqual(self.client.get(url).status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_method_not_allowed(self):
+        """It should return 405 for a method the endpoint does not support"""
+        response = self.client.patch(BASE_URL, json={})
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)

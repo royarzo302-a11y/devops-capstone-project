@@ -10,6 +10,7 @@ import logging
 from unittest import TestCase
 from tests.factories import AccountFactory
 from service.common import status  # HTTP Status Codes
+from service.common.error_handlers import internal_server_error
 from service.models import db, Account, init_db
 from service.routes import app
 
@@ -18,6 +19,7 @@ DATABASE_URI = os.getenv(
 )
 
 BASE_URL = "/accounts"
+HTTPS_BASE_URL = "https://localhost"
 
 
 ######################################################################
@@ -59,7 +61,7 @@ class TestAccountService(TestCase):
         accounts = []
         for _ in range(count):
             account = AccountFactory()
-            response = self.client.post(BASE_URL, json=account.serialize())
+            response = self.client.post(BASE_URL, base_url=HTTPS_BASE_URL, json=account.serialize())
             self.assertEqual(
                 response.status_code,
                 status.HTTP_201_CREATED,
@@ -76,12 +78,12 @@ class TestAccountService(TestCase):
 
     def test_index(self):
         """It should get 200_OK from the Home Page"""
-        response = self.client.get("/")
+        response = self.client.get("/", base_url=HTTPS_BASE_URL)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_health(self):
         """It should be healthy"""
-        resp = self.client.get("/health")
+        resp = self.client.get("/health", base_url=HTTPS_BASE_URL)
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertEqual(data["status"], "OK")
@@ -91,6 +93,7 @@ class TestAccountService(TestCase):
         account = AccountFactory()
         response = self.client.post(
             BASE_URL,
+            base_url=HTTPS_BASE_URL,
             json=account.serialize(),
             content_type="application/json"
         )
@@ -110,7 +113,7 @@ class TestAccountService(TestCase):
 
     def test_bad_request(self):
         """It should not Create an Account when sending the wrong data"""
-        response = self.client.post(BASE_URL, json={"name": "not enough data"})
+        response = self.client.post(BASE_URL, base_url=HTTPS_BASE_URL, json={"name": "not enough data"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_unsupported_media_type(self):
@@ -118,6 +121,7 @@ class TestAccountService(TestCase):
         account = AccountFactory()
         response = self.client.post(
             BASE_URL,
+            base_url=HTTPS_BASE_URL,
             json=account.serialize(),
             content_type="test/html"
         )
@@ -126,25 +130,25 @@ class TestAccountService(TestCase):
     def test_read_account(self):
         """It should read an existing account"""
         account = self._create_accounts(1)[0]
-        response = self.client.get(f"{BASE_URL}/{account.id}")
+        response = self.client.get(f"{BASE_URL}/{account.id}", base_url=HTTPS_BASE_URL)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.get_json(), account.serialize())
 
     def test_read_missing_account(self):
         """It should return 404 for a missing account"""
-        response = self.client.get(f"{BASE_URL}/0")
+        response = self.client.get(f"{BASE_URL}/0", base_url=HTTPS_BASE_URL)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_list_accounts(self):
         """It should list all existing accounts"""
         accounts = self._create_accounts(3)
-        response = self.client.get(BASE_URL)
+        response = self.client.get(BASE_URL, base_url=HTTPS_BASE_URL)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertCountEqual(response.get_json(), [a.serialize() for a in accounts])
 
     def test_list_empty_accounts(self):
         """It should return an empty list when no accounts exist"""
-        response = self.client.get(BASE_URL)
+        response = self.client.get(BASE_URL, base_url=HTTPS_BASE_URL)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.get_json(), [])
 
@@ -153,15 +157,15 @@ class TestAccountService(TestCase):
         account = self._create_accounts(1)[0]
         payload = dict(account.serialize(), name="Updated Name", id=0)
         url = f"{BASE_URL}/{account.id}"
-        response = self.client.put(url, json=payload)
+        response = self.client.put(url, base_url=HTTPS_BASE_URL, json=payload)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         expected = dict(payload, id=account.id)
         self.assertEqual(response.get_json(), expected)
-        self.assertEqual(self.client.get(url).get_json(), expected)
+        self.assertEqual(self.client.get(url, base_url=HTTPS_BASE_URL).get_json(), expected)
 
     def test_update_missing_account(self):
         """It should return 404 when an account cannot be updated"""
-        response = self.client.put(f"{BASE_URL}/0", json=AccountFactory().serialize())
+        response = self.client.put(f"{BASE_URL}/0", base_url=HTTPS_BASE_URL, json=AccountFactory().serialize())
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_delete_account(self):
@@ -169,12 +173,40 @@ class TestAccountService(TestCase):
         account = self._create_accounts(1)[0]
         url = f"{BASE_URL}/{account.id}"
         for _ in range(2):
-            response = self.client.delete(url)
+            response = self.client.delete(url, base_url=HTTPS_BASE_URL)
             self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
             self.assertEqual(response.data, b"")
-        self.assertEqual(self.client.get(url).status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(self.client.get(url, base_url=HTTPS_BASE_URL).status_code, status.HTTP_404_NOT_FOUND)
 
     def test_method_not_allowed(self):
         """It should return 405 for a method the endpoint does not support"""
-        response = self.client.patch(BASE_URL, json={})
+        response = self.client.patch(BASE_URL, base_url=HTTPS_BASE_URL, json={})
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_security_headers(self):
+        """It should return the configured security headers over HTTPS"""
+        response = self.client.get("/", base_url=HTTPS_BASE_URL)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.headers.get("X-Frame-Options"), "SAMEORIGIN")
+        self.assertEqual(response.headers.get("X-Content-Type-Options"), "nosniff")
+        self.assertEqual(
+            response.headers.get("Content-Security-Policy"),
+            "default-src 'self'; object-src 'none'",
+        )
+        self.assertEqual(
+            response.headers.get("Referrer-Policy"), "strict-origin-when-cross-origin"
+        )
+        self.assertIn("max-age=", response.headers.get("Strict-Transport-Security", ""))
+
+    def test_cors_security(self):
+        """It should return a CORS header for the lab API"""
+        response = self.client.get("/", base_url=HTTPS_BASE_URL)
+        self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), "*")
+        self.assertIsNone(response.headers.get("Access-Control-Allow-Credentials"))
+
+    def test_internal_error_response(self):
+        """It should serialize an internal server error as JSON"""
+        with app.app_context():
+            response, code = internal_server_error("Unexpected server error")
+        self.assertEqual(code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+        self.assertEqual(response.get_json()["status"], code)
